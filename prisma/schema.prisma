@@ -1,0 +1,287 @@
+// PostgreSQL target contract; not the deployed database.
+// Scalar references require FK relations and tenant security before production.
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "postgresql"
+ url = env("DATABASE_URL")
+}
+
+model User {
+ id String @id @default(cuid())
+ email String
+ displayName String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+
+model Organization {
+ id String @id @default(cuid())
+ name String
+ ownerId String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+
+model Team {
+ id String @id @default(cuid())
+ organizationId String
+ name String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model Season {
+ id String @id @default(cuid())
+ organizationId String
+ teamId String
+ name String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model Player {
+ id String @id @default(cuid())
+ organizationId String
+ teamId String
+ name String
+ jerseyNumber Int?
+ position String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model RosterMembership {
+ id String @id @default(cuid())
+ organizationId String
+ seasonId String
+ playerId String
+ role String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model Match {
+ id String @id @default(cuid())
+ organizationId String
+ teamId String
+ seasonId String
+ opponent String
+ playedAt DateTime
+ formation String?
+ score Json?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model VideoAsset {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ objectKey String
+ consent Json
+ retainedUntil DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model ProcessingJob {
+ id String @id @default(cuid())
+ organizationId String
+ videoAssetId String
+ stage String
+ status String
+ checkpoint Json?
+ modelVersion String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model PitchCalibration {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ corners Json
+ homography Json?
+ dimensions Json
+ orientation Json
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model PlayerTrack {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ playerId String?
+ trackKey String
+ confidence Float
+ provenance String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model BallTrack {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ trackKey String
+ confidence Float
+ provenance String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model Event {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ type String
+ startSeconds Float
+ endSeconds Float?
+ evidence Json
+ confidence Float?
+ provenance String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model EventClip {
+ id String @id @default(cuid())
+ organizationId String
+ eventId String
+ videoAssetId String
+ startSeconds Float
+ endSeconds Float
+ objectKey String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model TeamMetric {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ teamId String
+ name String
+ value Float
+ unit String
+ provenance String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model PlayerMetric {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ playerId String
+ name String
+ value Float
+ unit String
+ provenance String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model TacticalInsight {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ text String
+ evidence Json
+ confidence Float?
+ provenance String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model CoachNote {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String
+ authorId String
+ playerId String?
+ timestamp Float?
+ text String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model ReviewStatus {
+ id String @id @default(cuid())
+ organizationId String
+ insightId String
+ reviewerId String
+ status String
+ feedback String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model Conversation {
+ id String @id @default(cuid())
+ organizationId String
+ matchId String?
+ seasonId String?
+ userId String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model AssistantMessage {
+ id String @id @default(cuid())
+ organizationId String
+ conversationId String
+ role String
+ text String
+ citations Json
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model SharedClip {
+ id String @id @default(cuid())
+ organizationId String
+ eventClipId String
+ tokenHash String
+ permissions Json
+ expiresAt DateTime
+ revokedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
+
+model AuditLog {
+ id String @id @default(cuid())
+ organizationId String
+ actorId String
+ action String
+ resourceType String
+ resourceId String
+ details Json
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([organizationId])
+}
