@@ -1,0 +1,782 @@
+You are continuing development on PitchIQ, an existing soccer-video tracking web application. Do not restart the project from scratch. First understand the existing architecture and preserve the working functionality described below.
+
+PROJECT OVERVIEW
+
+PitchIQ is a React/TypeScript/Vinext web application for labeling soccer players and tracking them through uploaded MP4 footage.
+
+The intended workflow is:
+
+1. Upload a soccer video.
+2. Pause on a useful starting frame.
+3. Detect or manually label the visible players and ball.
+4. Assign players to Team A or Team B and connect boxes to roster identities.
+5. Run automatic tracking.
+6. Review uncertain observations and correct them manually.
+7. Eventually generate soccer analytics such as formations, movement, ball progression, tactical events, player actions, and match reports.
+
+The current version is V6. It is still an experimental tracking prototype, not a finished full-match analytics system.
+
+CURRENT DEPLOYMENT
+
+The latest hosted version is live at:
+
+https://pitchiq-coaching.bosnianthundaa.chatgpt.site
+
+The exported source represents the V6 source state from September 25, 2026.
+
+The original hosted project uses:
+
+- Cloudflare/Vinext-style deployment
+- D1 for metadata and saved tracking documents
+- R2 for uploaded MP4 videos
+- ChatGPT/Sites authentication in production
+- Local mock authentication during development
+
+The GitHub handoff intentionally removes the hosted project ID and credentials. The GitHub copy is intended for local development and future deployment setup.
+
+LOCAL DEVELOPMENT
+
+Requirements:
+
+- Node.js 22.13 or newer
+- pnpm 11.25.0
+- Git
+
+Commands:
+
+pnpm install --frozen-lockfile
+pnpm db:local
+pnpm dev
+
+Then open:
+
+http://localhost:5173
+
+Local development uses a mock local user. It does not connect to the hosted production account. Local D1/R2 state is emulated locally and is stored in ignored generated directories.
+
+Validation commands:
+
+pnpm typecheck
+pnpm test
+pnpm build
+
+All three passed for the exported V6 handoff.
+
+IMPORTANT EXCLUSIONS
+
+The repository does not contain:
+
+- Uploaded match videos
+- Saved production match labels
+- Production database records
+- Production credentials
+- ChatGPT/Sites credentials
+- Installed node_modules
+- Generated build output
+- Full GitHub history from the original hosted repository
+- The original hosted project identifier
+
+The bundled model files are included:
+
+- public/models/yolox-tiny.onnx
+- public/ort/ort-wasm-simd-threaded.wasm
+- public/ort/ort-wasm-simd-threaded.mjs
+
+These files include their corresponding license notices.
+
+CURRENT V6 FEATURES
+
+1. Video upload and playback
+
+The application accepts MP4 video uploads, stores video metadata, and supports range-based playback through the video API.
+
+Current upload limitations remain approximately:
+
+- MP4 only
+- 100 MB upload limit
+- Short video excerpts are the practical testing workflow
+
+2. Manual player and ball labeling
+
+Users can:
+
+- Pause the video.
+- Select a roster player.
+- Draw a box around that player.
+- Draw a ball box.
+- Correct an existing box.
+- Assign team and player identity.
+- Add substitutes.
+- Record substitutions.
+- Move through the video frame by frame.
+- Review and remove incorrect observations.
+
+3. Automatic detection
+
+The automatic detector uses:
+
+- YOLOX-Tiny
+- COCO-style person and sports-ball classes
+- ONNX Runtime Web
+- Browser-side inference
+- Tiled image scanning for distant players
+- Optional detailed scanning
+- Pitch/grass filtering
+- Focused crops for local ball searches
+
+The detector is generic. It is not trained specifically for:
+
+- Soccer broadcast footage
+- Individual player identity
+- Jersey numbers
+- Goalkeeper recognition
+- Team-specific uniforms
+- Soccer field geometry
+
+The detector may find:
+
+- Players
+- Referees
+- Coaches
+- Sideline staff
+- Spectators near the pitch
+- False ball candidates
+- Small bright objects
+
+Team assignment and identity still require user confirmation.
+
+4. Player tracking
+
+Player tracking includes:
+
+- Persistent tracks
+- One-to-one global assignment
+- Appearance matching
+- Shirt color/hue/brightness features
+- Camera translation and scale estimation
+- Short motion predictions
+- Scene-cut detection
+- Substitution-aware active rosters
+- Confidence-based matching
+- Ambiguity rejection
+
+If the tracker is uncertain, it can:
+
+- Preserve a short estimated path
+- Mark an observation as predicted
+- Stop assigning the identity
+- Add a review issue
+- Ask the user to confirm a later frame
+
+The design intentionally prefers a missing observation over silently switching a player’s identity.
+
+5. Players missing from the starting frame
+
+A major V6 feature is partial starting-frame support.
+
+The user does not need all 22 players to be visible at kickoff.
+
+A player can be:
+
+- Present in the roster but not visible at the start
+- First labeled later when they enter the camera view
+- Added by drawing a box manually
+- Assigned from a detector candidate
+- Connected to their existing roster identity
+
+The tracker stores player appearance memory and historical labels so that an off-screen player can be remembered.
+
+6. Off-screen player memory
+
+When a player leaves the camera view, the application attempts to remember:
+
+- Their player ID
+- Last known box
+- Appearance signature
+- Last-seen time
+- Approximate edge/location context
+- Team assignment
+
+A player who disappears is not automatically removed from the match.
+
+When that player returns:
+
+- Appearance must be compatible.
+- Location/motion history may be used.
+- Multiple observations are required.
+- The candidate must not conflict with another active player.
+- Ambiguous returns remain unresolved.
+- Recovered identities are marked as inferred/reidentified and should be reviewed.
+
+Long absences are deliberately conservative. Same-kit teammates should not be reassigned merely because the roster has one remaining name.
+
+A uniquely dressed goalkeeper or player may be easier to recover than a same-kit outfield player.
+
+7. Roster deduction
+
+The project includes a conservative “remaining teammate” suggestion.
+
+It only proposes a roster identity when:
+
+- Exactly one roster identity remains unassigned for that team.
+- Ten confirmed teammates are available.
+- Enough opposing-team appearance examples exist.
+- A unique visual candidate matches the team appearance.
+- The candidate is not equally compatible with another identity.
+
+Roster count alone must never silently assign a player.
+
+8. Ball tracking
+
+The ball has a separate tracking path from player tracking.
+
+It uses:
+
+- Motion prediction
+- Camera-adjusted position
+- Ball size/diameter continuity
+- Compact bright-component detection
+- Shape and aspect-ratio checks
+- Local contrast
+- Long-line rejection
+- Nearby-player context
+- Last confirmed ball position
+- The area near the feet of the last nearby player
+- A focused neural detector crop when confidence falls
+
+When the ball is lost, the tracker can search around:
+
+- The predicted ball position
+- The last confirmed ball position
+- The last player associated with the ball’s vicinity
+
+Nearby-player context is only a search hint. It does not assume that the player possesses the ball.
+
+The ball tracker is improved but not solved. It can still confuse:
+
+- White boots
+- Field markings
+- Bright advertising
+- Small objects
+- Occluded ball positions
+- A ball close to a player’s feet
+
+After prolonged uncertainty, automatic mode pauses and asks the user to confirm the ball.
+
+9. Field references
+
+Field references can be added over multiple frames.
+
+The user can mark:
+
+- Far-left corner
+- Far-right corner
+- Near-right corner
+- Near-left corner
+- Far touchline
+- Near touchline
+- Left goal line
+- Right goal line
+
+Corners and boundary-line segments do not need to be visible simultaneously.
+
+Each field reference stores:
+
+- Landmark name
+- Timestamp
+- One point for a corner
+- Two points for a line
+- Camera-segment context
+
+During tracking, image-plane camera estimates can project a reference to later frames while the camera motion remains reliable.
+
+These projections are estimates. The field system is not yet:
+
+- A homography
+- A true pitch calibration system
+- A metric coordinate system
+- An automatic field-line detector
+- A system that can infer all unseen corners from one line
+
+Camera cuts or unreliable motion estimates stop field projection.
+
+10. Crowded visual interface
+
+The V6 interface changed candidate labels so that:
+
+- Name banners are hidden by default.
+- Labels appear on hover.
+- Labels appear when a box is selected.
+- Keyboard focus reveals the label.
+- Touch users can select a box.
+- “Show all name labels” restores the old full-label view.
+- Thin outlines remain visible.
+- Field mode suppresses normal candidate selection.
+
+11. Automatic processing
+
+The user can choose:
+
+- Five-second tracking
+- Fifteen-second tracking
+- Auto until review
+
+Automatic mode:
+
+- Processes player detections at approximately 5 Hz.
+- Processes ball tracking at approximately 10 Hz.
+- Uses checkpoints approximately every five seconds.
+- Saves observations to the tracking document.
+- Pauses on critical uncertainty.
+- Preserves unsaved local state if a save fails.
+- Supports JSON export.
+- Allows returning to the saved checkpoint.
+
+The application still processes in the foreground browser. Closing the tab stops processing.
+
+12. Review and evidence labels
+
+Saved points may be labeled as:
+
+- Manual
+- Detector
+- Experimental
+- Detection evidence
+- Predicted evidence
+- Appearance evidence
+- Reidentified evidence
+
+Estimated and inferred observations are visually distinguished.
+
+Users are not required to approve every frame, but unresolved issues and inferred identities should be reviewed.
+
+CORE FILES
+
+app/tracking/workspace.tsx
+
+Main tracking interface. Contains:
+
+- Video playback
+- Manual box drawing
+- Candidate assignment
+- Roster UI
+- Substitutions
+- Automatic tracking loop
+- Checkpoint saving
+- Review panel
+- Field-reference UI
+- Hover/selection label behavior
+
+app/tracking/tracking.css
+
+Tracking-specific styling:
+
+- Video overlay
+- Player boxes
+- Detection candidates
+- Estimated boxes
+- Inferred boxes
+- Field landmarks
+- Hidden/revealed labels
+- Responsive layout
+
+lib/player-detector.ts
+
+Handles:
+
+- ONNX Runtime Web session
+- YOLOX-Tiny loading
+- Tiled scans
+- Focused crop scans
+- Detector decoding
+- Pitch filtering
+- Appearance feature extraction
+
+lib/detection-core.ts
+
+Handles lower-level detection logic:
+
+- YOLOX output decoding
+- Box conversion
+- NMS/suppression
+- Tensor preprocessing
+- Detection types
+
+lib/persistent-tracker.ts
+
+Handles:
+
+- Persistent player tracks
+- Track initialization
+- Motion prediction
+- Hungarian/global assignment
+- Appearance matching
+- Camera compensation
+- Confidence thresholds
+- Short-gap recovery
+
+lib/player-recovery.ts
+
+Handles:
+
+- Missing players
+- Player memory
+- Off-screen identity preservation
+- Return matching
+- Long-gap safeguards
+- Repeated evidence requirements
+- Roster deduction suggestions
+- Save/restore of player memory
+
+lib/ball-tracker.ts
+
+Handles:
+
+- Ball candidates
+- Bright small-object matching
+- Motion continuity
+- Nearby-player search context
+- Last confirmed location
+- Ball recovery confirmation
+- Prediction/recovery evidence
+
+lib/field-reference.ts
+
+Handles:
+
+- Named corners and boundary lines
+- Field landmark storage
+- Camera-segment projection
+- Camera reliability checks
+- Estimated versus confirmed reference positions
+
+lib/tracking.ts
+
+Defines the tracking document schema using Zod.
+
+It contains:
+
+- Teams
+- Players
+- Ball
+- Points
+- Issues
+- Substitutions
+- Checkpoints
+- Player memory
+- Field marks
+- Field camera history
+- Calibration timestamp
+
+app/api/tracking/route.ts
+
+Handles:
+
+- Loading tracking documents
+- Saving tracking documents
+- Owner isolation
+- Revision conflicts
+- Schema validation
+- Persistence through the records table
+
+app/api/videos/route.ts
+
+Handles:
+
+- MP4 upload
+- Video metadata
+- R2 object storage
+- Range playback
+- Video deletion
+- 100 MB limit
+
+drizzle/0000_sudden_beast.sql
+
+Creates the records table used by the local/hosted persistence layer.
+
+tests/tracking.test.cjs
+
+Contains 24 automated tests covering:
+
+- Existing tracking behavior
+- Player appearance matching
+- Camera translation
+- Camera cuts
+- Pitch filtering
+- Detector behavior
+- Ambiguous assignments
+- Ball tracking
+- Player recovery
+- Long goalkeeper absence
+- Same-kit ambiguity
+- Late first labels
+- Player memory serialization
+- Field landmarks
+- Field camera projection
+- Ball recovery near nearby players
+- Checkpoint serialization
+- API owner/revision behavior
+
+public/models/yolox-tiny.onnx
+
+Bundled YOLOX-Tiny model.
+
+public/ort/
+
+Bundled ONNX Runtime Web WASM files.
+
+README.md
+
+Basic setup and project overview.
+
+docs/DEVELOPER_HANDOFF.md
+
+More detailed developer instructions and limitations.
+
+GITHUB_SETUP.md
+
+Instructions for adding the source to GitHub and sharing it with another developer.
+
+CURRENT VALIDATION STATUS
+
+V6 validation completed:
+
+- TypeScript type checking passed.
+- All 24 automated tests passed.
+- Production build passed.
+- Bundled detector assets are present.
+- Local database migration setup is present.
+- GitHub handoff archive was created and validated.
+
+Browser interaction testing is not fully verified because the managed preview environment previously stalled. The live version was deployed successfully, but the complete browser workflow still needs to be tested locally or through a stable preview.
+
+KNOWN LIMITATIONS
+
+1. Processing is very slow
+
+The current detector runs in the browser using CPU/WASM inference. A five-second clip may take approximately two minutes to process.
+
+A full 90-minute match is not currently practical.
+
+Likely performance improvements:
+
+- Use WebGPU where supported.
+- Reduce detector frequency.
+- Track between detector calls.
+- Scan only predicted regions.
+- Avoid repeated full/tiled scans.
+- Move inference into a Web Worker.
+- Use a faster/smaller model.
+- Use native/server-side ONNX inference.
+- Add background job processing.
+- Store results incrementally in chunks.
+
+2. Generic detection model
+
+YOLOX-Tiny COCO is generic, not soccer-specific.
+
+It does not understand:
+
+- Jersey numbers
+- Individual player identity
+- Team tactics
+- Soccer formations
+- Soccer events
+- Possession
+- Passes
+- Tackles
+- Shots
+- Fouls
+- Offside
+- Goalkeeper-specific behavior
+
+3. Identity uncertainty
+
+Appearance matching is lightweight and based mainly on image appearance and shirt features.
+
+It can fail when:
+
+- Teammates wear nearly identical kits.
+- Players overlap.
+- Players are very small.
+- The camera zooms significantly.
+- Lighting changes.
+- Players leave and return after long gaps.
+- The viewpoint changes sharply.
+
+4. Ball limitations
+
+The ball is very small in most footage and may be occluded or visually similar to boots, lines, or bright objects.
+
+5. Full-match storage
+
+The current document storage is still bounded.
+
+The runtime uses a conservative observation cap to avoid oversized API JSON documents. Full-match chunked storage has not been implemented.
+
+6. No background processing
+
+Processing stops when the browser tab closes or the computer sleeps.
+
+7. No production GPU pipeline
+
+The system does not yet have:
+
+- Server-side GPU workers
+- Job queue
+- Progress persistence independent of the browser
+- Automatic retrying
+- Full-match resumability
+- Distributed processing
+
+8. No analytics engine yet
+
+The current app mainly creates and reviews tracking observations.
+
+It does not yet calculate reliable:
+
+- Formations
+- Heatmaps
+- Distance covered
+- Speed
+- Spacing
+- Possession
+- Pass networks
+- Tactical events
+- Team shape
+- Player ratings
+- Coaching insights
+- Season-long analytics
+
+RECOMMENDED NEXT DEVELOPMENT ORDER
+
+Priority 1: Performance
+
+Before adding advanced analytics, make processing practical.
+
+Recommended sequence:
+
+1. Add timing instrumentation around:
+   - Video seeking
+   - Canvas frame extraction
+   - ONNX inference
+   - Crop count
+   - Ball fallback inference
+   - JSON persistence
+
+2. Add WebGPU detection and an execution-provider fallback:
+   - Try WebGPU.
+   - Fall back to WASM.
+   - Clearly show the active backend and measured speed.
+
+3. Move inference into a Web Worker so the UI remains responsive.
+
+4. Reduce full detector scans:
+   - Initial scan: comprehensive.
+   - Normal tracking: use lightweight tracker.
+   - Detector scan only every N frames or when confidence drops.
+   - Use local crops around predicted player positions.
+   - Use full scans after camera cuts or when many identities disappear.
+
+5. Benchmark:
+   - Five-second clip processing time.
+   - Per-frame detector time.
+   - Player continuity.
+   - Ball continuity.
+   - False identity switches.
+   - Memory use.
+
+Priority 2: Full-match data architecture
+
+Replace one large JSON tracking document with chunked storage.
+
+Potential design:
+
+- Match metadata record.
+- Tracking chunks by time range, such as 30 seconds or 60 seconds.
+- One chunk per player/time range or time block.
+- Checkpoint record.
+- Event/issue table.
+- Revision/version metadata.
+
+Do not simply raise the JSON size limit. Large single documents will eventually become unreliable.
+
+Priority 3: Background job processing
+
+Create a server-side job workflow:
+
+1. User uploads the video.
+2. User labels initial players.
+3. Server creates a processing job.
+4. Worker reads video frames.
+5. Worker performs inference and tracking.
+6. Results are saved incrementally.
+7. UI polls or subscribes to progress.
+8. User reviews unresolved intervals.
+
+This will allow full-match processing even if the browser closes.
+
+Priority 4: Better soccer-specific perception
+
+Evaluate a soccer-trained detector or tracking model.
+
+Potential improvements:
+
+- Soccer player/ball detector.
+- Jersey-number OCR.
+- Team-color classifier.
+- Pose/keypoint features.
+- Re-identification embeddings.
+- Goalkeeper-specific appearance.
+- Field-line detector.
+- Camera calibration model.
+
+Do not replace the current generic model without benchmarking false positives, distant players, and ball recall.
+
+Priority 5: Field calibration
+
+Extend field references into:
+
+- Automatic line detection.
+- Homography estimation.
+- Metric pitch coordinates.
+- Camera pan/zoom compensation.
+- Player locations in real field coordinates.
+- Distance and speed calculations.
+
+The current field system should be treated as an image-reference foundation, not a finished calibration system.
+
+Priority 6: Analytics layer
+
+Once tracking data is reliable enough, add derived analytics as separate modules:
+
+- Team shape
+- Player spacing
+- Formation changes
+- Width and depth
+- Defensive line
+- Possession zones
+- Ball progression
+- Pass/receive candidates
+- Pressing events
+- Transition events
+- Player heatmaps
+- Distance/speed
+- Tactical review timestamps
+
+Every analytic result should preserve uncertainty and link back to source timestamps.
+
+DEVELOPMENT PRINCIPLES
+
+- Do not silently assign player identities when evidence is weak.
+- Missing data is preferable to incorrect identity data.
+- Preserve backward compatibility when changing the tracking schema.
+- Add regression tests for every tracking change.
+- Keep manual correction possible at every stage.
+- Treat predicted, inferred, detector, and manually confirmed observations differently.
+- Do not claim improved tracking accuracy without testing actual footage.
+- Benchmark both speed and identity accuracy.
+- Do not include user videos or production credentials in GitHub.
+- Keep the local mock authentication limited to localhost.
+- Preserve third-party license files.
+- Read the existing README and docs/DEVELOPER_HANDOFF.md before making major changes.
