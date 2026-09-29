@@ -1,0 +1,4 @@
+norfair==2.3.0
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+onnxruntime==1.22.0

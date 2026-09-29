@@ -1,4 +1,13 @@
-# PitchIQ — V6 developer handoff
+# PitchIQ — native tracking preview
+
+New: **Norfair segment tracking** runs outside the browser and imports observations
+back into the existing video workspace. Start with the [native runner guide](services/video/README.md).
+It supports 5–20 second segments, initial/future labels, camera motion, conservative
+identity recovery, and separate ball tracking. This is a local preview, not a
+deployed background service or a validated full-match tracker.
+
+The original V6 browser tracker remains available. The history below describes
+that baseline; the current branch adds the native runner and clean-clone fixes.
 
 Soccer video labeling and experimental tracking, exported from the live V6 source on September 25, 2026.
 Source commit: `9889e0eea55871c2e9123231fa74d4039901fb60`.

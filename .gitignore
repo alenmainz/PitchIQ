@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.next/
+.wrangler/
+.sites-runtime/
+.openai/
+.env*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+*.tsbuildinfo
+.DS_Store
+pitchiq-setup.json
+pitchiq-result.json
+*.mp4
