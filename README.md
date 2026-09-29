@@ -1,18 +1,12 @@
-# PitchIQ — native tracking preview
+# PitchIQ — browser tracking workspace
 
-New: **Norfair segment tracking** runs outside the browser and imports observations
-back into the existing video workspace. Start with the [native runner guide](services/video/README.md).
-It supports 5–20 second segments, initial/future labels, camera motion, conservative
-identity recovery, and separate ball tracking. This is a local preview, not a
-deployed background service or a validated full-match tracker.
+The hosted workflow now uploads MP4s in small chunks and runs **Norfair 2.3.0 automatically inside a browser worker**, through Pyodide. Clients do not need Python, a terminal, or export/import steps. Open a match, let its first frame scan, assign one clear player from each team, optionally suggest matching teammates, and label the ball. Check provisional roster identities before tracking.
 
-The original V6 browser tracker remains available. The history below describes
-that baseline; the current branch adds the native runner and clean-clone fixes.
+The ball trail shows recent observations, compensated for camera movement. It stops at uncertain gaps and camera cuts; it is not a prediction of the next pass and does not itself improve the detector.
 
-Soccer video labeling and experimental tracking, exported from the live V6 source on September 25, 2026.
-Source commit: `9889e0eea55871c2e9123231fa74d4039901fb60`.
+This remains a segment-tracking prototype. Keep the tab open. The upload limit is 100 MiB, tracking saves every five processed seconds and pauses at its existing saved-point limit (roughly 30 seconds with 22 active tracks). It is not yet an unattended full-match service. The COCO detector still misses some tiny/occluded balls and cannot identify names or jersey numbers.
 
-**Start here:** [developer handoff](docs/DEVELOPER_HANDOFF.md) and [GitHub setup](GITHUB_SETUP.md).
+See [September 29 update](docs/SEPT29_TRACKING_UPDATE.md) for changes, evidence and limits. The optional [native runner](services/video/README.md) remains for developers, but is no longer part of the client workflow.
 
 ## Run locally
 
@@ -32,21 +26,24 @@ The local database and video bucket are emulated by Cloudflare tooling and store
 ```sh
 pnpm test
 pnpm typecheck
+pnpm test:norfair
 pnpm build
 ```
 
 Production hosting is a separate task: this is a full-stack Worker application, not a static GitHub Pages site. See the handoff before deploying elsewhere.
 
+The first `pnpm dev` or `pnpm build` prepares ~37 MB of checksum-pinned browser runtime assets. No Python installation is required. Production serves these assets from the site itself; match footage is not sent to a third-party tracker.
+
 ## What's included
 
 - React/TypeScript UI, backend routes, schema and database migration.
-- V6 player/ball trackers, appearance memory and timestamped field references.
+- Browser Norfair integration, player/ball trackers, appearance memory and timestamped field references.
 - YOLOX-Tiny model and ONNX Web runtime binaries, with their licenses.
-- Lockfile, 24 regression tests, a numeric detection fixture and benchmark script.
+- Lockfile, tracking/upload regression tests, real-runtime tests, numeric detection fixture and benchmark script.
 - Earlier roadmap and release history, including explicit prototype limitations.
 
-The export adds local setup commands and documentation and removes the live Sites project identifier. It excludes Git history/remotes, installed dependencies, build outputs, runtime state, credentials and user-uploaded videos. The live site was not changed. The source can be placed into a new repository as an initial commit.
+The GitHub copy excludes the live Sites project identifier, installed dependencies, build outputs, runtime state, credentials and user-uploaded videos. Runtime assets are restored by the build script.
 
 ## License
 
-No new license is granted for the original project code by this export; the owner should decide licensing before wider redistribution. Preserve the bundled third-party notices (`public/models`, `public/ort`, `build`, and `vendor`). npm dependencies retain their own licenses.
+No new license is granted for the original project code by this export; the owner should decide licensing before wider redistribution. Preserve the bundled third-party notices (`public/models`, `public/ort`, `public/norfair`, `build`, and `vendor`). npm dependencies retain their own licenses.

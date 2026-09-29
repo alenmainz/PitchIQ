@@ -3,7 +3,7 @@ export type Detection={id:string;kind:'person'|'ball';score:number;box:Box};
 export type Crop={x:number;y:number;w:number;h:number};
 export const INPUT_SIZE=416;
 export function iou(a:Box,b:Box){const area=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));return area/(a.w*a.h+b.w*b.h-area||1);}
-export function suppress(items:Detection[],threshold=.45){const out:Detection[]=[];for(const item of [...items].sort((a,b)=>b.score-a.score)){if(!out.some(other=>other.kind===item.kind&&iou(other.box,item.box)>threshold))out.push(item);}return out.slice(0,80);}
+export function suppress(items:Detection[],threshold=.45){const out:Detection[]=[];for(const item of [...items].sort((a,b)=>b.score-a.score)){if(!out.some(other=>{if(other.kind!==item.kind)return false;const a=other.box,b=item.box;const intersection=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));const contained=intersection/Math.min(a.w*a.h,b.w*b.h);return iou(a,b)>threshold||(item.kind==='person'&&contained>.88&&Math.abs(a.x+a.w/2-b.x-b.w/2)<Math.max(a.w,b.w)*.3);})){out.push(item);}}return out;}
 export function cropsFor(width:number,height:number,detailed:boolean):Crop[]{const full={x:0,y:0,w:width,h:height};if(!detailed||Math.max(width,height)<=512)return [full];const size=Math.min(512,Math.min(width,height)),step=Math.round(size*.8);const xs:number[]=[],ys:number[]=[];for(let x=0;;x+=step){xs.push(Math.min(x,width-size));if(x>=width-size)break;}for(let y=0;;y+=step){ys.push(Math.min(y,height-size));if(y>=height-size)break;}return [full,...ys.flatMap(y=>xs.map(x=>({x,y,w:size,h:size})))];}
 // Official YOLOX ONNX export uses BGR values in [0,255], CHW, and top-left letterboxing.
 export function toTensor(rgba:Uint8ClampedArray){const plane=INPUT_SIZE*INPUT_SIZE,out=new Float32Array(plane*3);for(let i=0;i<plane;i++){out[i]=rgba[i*4+2];out[plane+i]=rgba[i*4+1];out[plane*2+i]=rgba[i*4];}return out;}
@@ -14,4 +14,13 @@ export function associate(tracks:AssociationTrack[],detections:Detection[]){
  const center=(b:Box)=>({x:b.x+b.w/2,y:b.y+b.h/2});
  const candidates=tracks.map(tr=>{const p=center(tr.box);return detections.flatMap((d,index)=>{if(d.kind!==tr.kind)return [];const q=center(d.box),distance=Math.hypot(q.x-p.x-tr.vx,q.y-p.y-tr.vy);const gate=tr.kind==='ball'?.09:Math.max(.025,Math.min(.075,tr.box.h*1.8));const ratio=d.box.w*d.box.h/(tr.box.w*tr.box.h);if(distance>gate||ratio<.3||ratio>3.3)return [];return [{index,cost:distance/gate*.65+(1-iou({...tr.box,x:tr.box.x+tr.vx,y:tr.box.y+tr.vy},d.box))*.35}];}).sort((a,b)=>a.cost-b.cost);});
  const used=new Set<number>();return tracks.map((track,i)=>{const opts=candidates[i],best=opts[0];if(!best||best.cost>.83||opts[1]&&opts[1].cost-best.cost<.12)return {track,reason:'Detection missing or identity ambiguous. Confirm with a fresh box.'};if(candidates.some((other,j)=>j!==i&&other[0]?.index===best.index)||used.has(best.index))return {track,reason:'Two players could match the same box. Confirm their identities.'};used.add(best.index);const d=detections[best.index],a=center(track.box),b=center(d.box);return {track:{...track,box:d.box,vx:(b.x-a.x)*.7+track.vx*.3,vy:(b.y-a.y)*.7+track.vy*.3},detection:d};});
+}
+// Magnify dense groups after the wide scan: small/overlapping players and nearby
+// balls otherwise occupy only a few network pixels. Bounded to six extra crops.
+export function refinementCrops(detections:Detection[],width:number,height:number):Crop[]{
+ const people=detections.filter(d=>d.kind==='person'&&d.score>=.18&&d.box.h<.12);
+ const size=Math.min(256,width,height),ranked=people.map(d=>({d,density:people.filter(p=>Math.hypot((p.box.x+p.box.w/2-d.box.x-d.box.w/2)*width,(p.box.y+p.box.h/2-d.box.y-d.box.h/2)*height)<size*.6).length})).sort((a,b)=>b.density-a.density||a.d.box.h-b.d.box.h);
+ const crops:Crop[]=[];
+ for(const {d,density} of ranked){if(density<2)continue;const crop={x:Math.round(Math.max(0,Math.min(width-size,(d.box.x+d.box.w/2)*width-size/2))),y:Math.round(Math.max(0,Math.min(height-size,(d.box.y+d.box.h*.75)*height-size/2))),w:size,h:size};if(crops.some(c=>Math.hypot(c.x-crop.x,c.y-crop.y)<size*.65))continue;crops.push(crop);if(crops.length===6)break;}
+ return crops;
 }

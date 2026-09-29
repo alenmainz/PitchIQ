@@ -92,9 +92,18 @@ export async function finishUpload(deps: Dependencies, owner: string, id: unknow
       }
       parts.push(await upload.uploadPart(parts.length + 1, bytes));
     }
-    object = await upload.complete(parts);
+    await upload.complete(parts);
+    // The production multipart completion response is not an authoritative
+    // metadata read. Read the committed object before verifying its size.
+    object = await bucket.head(s.key);
   }
-  if (object.size !== s.size || object.customMetadata?.uploadSession !== id) throw new UploadError('Video size verification failed. Please retry.', 409);
+  // The storage key comes from this owner's server-created session, never from
+  // request input. Do not reject valid objects over optional/case-normalized
+  // metadata returned differently by local emulation and the R2 service.
+  if (!object || object.size !== s.size) {
+    console.error('Upload verification failed', {id, expected:s.size, actual:object?.size});
+    throw new UploadError('The saved video has an unexpected size. Please retry the upload.', 409);
+  }
   const data = {filename:s.filename, key:s.key, size:s.size, metadata:s.metadata, started:s.created, mode:'manual'};
   // Keep the completed object and session if D1 fails: a retry recovers without
   // retransferring the footage. Ownership is checked above and on every read.

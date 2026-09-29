@@ -95,6 +95,17 @@ test('video upload: real R2/D1 emulation, browser client, completion, ownership 
       assert.equal(recovered.size,7);
       assert.equal((await upload.finishUpload(deps,owner,s.id)).id,s.id);
     });
+    await t.test('completion accepts authoritative size without optional multipart metadata',async()=>{
+      const s=await upload.beginUpload(deps,owner,{filename:'metadata.mp4',size:7});
+      await upload.putChunk(deps,owner,s.id,1,new Request('https://test',{method:'PUT',body:'example'}));
+      const serviceBucket=new Proxy(bucket,{get(target,key){
+        if(key==='head')return async name=>{const value=await target.head(name);return value?{...value,customMetadata:undefined}:null;};
+        if(key==='resumeMultipartUpload')return (...args)=>{const original=target.resumeMultipartUpload(...args);return {...original,uploadPart:original.uploadPart.bind(original),complete:async parts=>{await original.complete(parts);return {};}};};
+        const value=target[key];return typeof value==='function'?value.bind(target):value;
+      }});
+      const result=await upload.finishUpload({...deps,bucket:serviceBucket},owner,s.id);
+      assert.equal(result.size,7);
+    });
     await t.test('automatically retries a failed chunk and lost completion response',async()=>{
       let chunkFailures=0, completeFailures=0, initCount=0;
       global.fetch=async(url,init)=>{

@@ -15,3 +15,9 @@ __pycache__/
 pitchiq-setup.json
 pitchiq-result.json
 *.mp4
+
+# Reproducible browser runtime downloads (SHA-256 pinned in scripts/norfair-assets.json)
+/public/norfair/runtime/*
+!/public/norfair/runtime/package.json
+!/public/norfair/runtime/filterpy-1.4.5-py3-none-any.whl
+!/public/norfair/runtime/norfair-2.3.0-py3-none-any.whl

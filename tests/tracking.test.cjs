@@ -85,3 +85,32 @@ test('neural ball recovery also requires repeated sightings and updates the near
  const first=ballTracker.confirmBallDetection(ballFrame(),seed,d,.4,vision.stillCamera,players);assert.equal(first.sample,undefined);
  const second=ballTracker.confirmBallDetection(ballFrame(),first.track,d,.5,vision.stillCamera,players);assert.equal(second.sample.evidence,'appearance');assert.equal(second.track.nearPlayer.id,'A2');
 });
+const trails=load('lib/ball-trail.ts');
+test('ball trail respects uncertainty, camera pans, gaps, cuts and playback time',()=>{
+ const make=(time,x,evidence='detection')=>({playerId:'ball',time,box:{x,y:.3,w:.01,h:.01},score:.9,reviewed:false,source:'experimental',evidence});
+ const points=[make(0,.2),make(.1,.21),make(.2,.22),make(.3,.23)];
+ const cameras=points.map(p=>({time:p.time,segment:'one',scale:1,dx:p.time*.1,dy:0}));
+ let result=trails.ballTrail(points,.2,cameras);assert.equal(result[0].length,3);assert.ok(Math.abs(result[0][0].x-.225)<1e-6);
+ assert.equal(trails.ballTrail(points,.7,cameras).length,0);
+ assert.equal(trails.ballTrail([points[0],{...points[1],evidence:'predicted'},points[2]],.2,cameras).length,0);
+ assert.equal(trails.ballTrail(points,.2,cameras.map(c=>({...c,segment:c.time===.2?'cut':'one'}))).length,0);
+ assert.equal(trails.ballTrail(points,.2,[]).length,0);
+});
+test('suppression removes contained partial boxes without merging adjacent players',()=>{
+ const a={id:'a',kind:'person',score:.9,box:{x:.2,y:.2,w:.04,h:.1}};
+ const partial={...a,id:'partial',score:.6,box:{x:.21,y:.2,w:.02,h:.04}};
+ const neighbor={...a,id:'neighbor',score:.8,box:{x:.235,y:.2,w:.03,h:.1}};
+ assert.equal(detector.suppress([a,partial,neighbor]).length,2);
+});
+const kits=load('lib/team-suggestions.ts',{'./track-vision':vision,'./detection-core':detector});
+test('kit suggestions require both confirmed teams and reject ambiguous colors',()=>{
+ const examples=[{team:'A',box,appearance:[1,0]},{team:'B',box,appearance:[0,1]}];
+ const d={id:'d',kind:'person',score:.8,box:{...box,x:.8},appearance:[1,0]};
+ assert.equal(kits.suggestKits([d],examples.slice(0,1)).length,0);
+ assert.equal(kits.suggestKits([d],examples)[0].team,'A');
+ assert.equal(kits.suggestKits([{...d,appearance:[.5,.5]}],examples).length,0);
+});
+test('a supported touchline filters technical-area people without hiding players on the pitch',()=>{
+ const f=frame(0,0,false);for(let x=0;x<f.width;x++)for(let y=74;y<=76;y++){const i=(y*f.width+x)*4;f.data[i]=f.data[i+1]=f.data[i+2]=230;}
+ const mask=vision.pitchMask(f);assert.ok(mask.contains({x:.4,y:.5,w:.05,h:.15}));assert.equal(mask.contains({x:.4,y:.8,w:.05,h:.15}),false);
+});

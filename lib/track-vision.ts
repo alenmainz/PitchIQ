@@ -17,6 +17,19 @@ export function shirtFeature(frame:Frame,box:Box):number[]{
  return count>=10?hist.map(v=>v/count):[];
 }
 export function appearanceDistance(a:number[],b:number[]){return !a.length||!b.length?0.25:1-a.reduce((s,v,i)=>s+Math.sqrt(v*(b[i]||0)),0);}
+// A long, nearly horizontal white boundary in the lower image can separate
+// the pitch from the technical area. If evidence is weak, retain grass-only filtering.
+function nearTouchline(frame:Frame){
+ const stride=Math.max(2,Math.round(frame.width/240)),bin=Math.max(3,Math.round(frame.height/135));
+ const slopes=Array.from({length:25},(_,i)=>(i-12)*.01),votes=slopes.map(()=>new Map<number,Set<number>>());
+ const isGrass=(x:number,y:number)=>{if(y<0||y>=frame.height)return false;const i=(y*frame.width+x)*4;return grass(frame.data[i],frame.data[i+1],frame.data[i+2]);};
+ for(let x=0;x<frame.width;x+=stride)for(let y=Math.floor(frame.height*.6);y<frame.height-8;y+=2){const i=(y*frame.width+x)*4,r=frame.data[i],g=frame.data[i+1],b=frame.data[i+2];if(Math.min(r,g,b)<160||Math.max(r,g,b)-Math.min(r,g,b)>65||!isGrass(x,y-8)||!isGrass(x,y+8))continue;
+  for(let j=0;j<slopes.length;j++){const intercept=Math.round((y-slopes[j]*x)/bin);let columns=votes[j].get(intercept);if(!columns){columns=new Set();votes[j].set(intercept,columns);}columns.add(x);}
+ }
+ let best:{slope:number;intercept:number;count:number}|undefined;
+ for(let j=0;j<slopes.length;j++)for(const [intercept,columns] of votes[j])if(columns.size>frame.width/stride*.52&&Math.max(...columns)-Math.min(...columns)>frame.width*.7&&(!best||columns.size>best.count))best={slope:slopes[j],intercept:intercept*bin,count:columns.size};
+ return best;
+}
 // Largest connected grass region, with small holes filled within each row.
 // Recomputed each frame so the filter follows camera movement; not a field calibration.
 export function pitchMask(frame:Frame){
@@ -24,8 +37,8 @@ export function pitchMask(frame:Frame){
  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(Math.floor((y+.5)*frame.height/height)*frame.width+Math.floor((x+.5)*frame.width/width))*4;green[y*width+x]=grass(frame.data[i],frame.data[i+1],frame.data[i+2])?1:0;}
  for(let i=0;i<green.length;i++){if(!green[i]||seen[i])continue;const component=[i];seen[i]=1;for(let j=0;j<component.length;j++){const q=component[j],x=q%width;for(const n of [x>0?q-1:-1,x<width-1?q+1:-1,q-width,q+width])if(n>=0&&n<green.length&&green[n]&&!seen[n]){seen[n]=1;component.push(n);}}if(component.length>largest.length)largest=component;}
  const left=Array(height).fill(width),right=Array(height).fill(-1);for(const q of largest){const y=Math.floor(q/width),x=q%width;left[y]=Math.min(left[y],x);right[y]=Math.max(right[y],x);}
- const reliable=largest.length>width*height*.12;
- return {reliable,contains:(box:Box)=>{if(!reliable)return true;const x=(box.x+box.w/2)*width,y=Math.floor((box.y+box.h)*height);for(let row=Math.max(0,y-2);row<=Math.min(height-1,y+2);row++)if(x>=left[row]-2&&x<=right[row]+2)return true;return false;}};
+ const reliable=largest.length>width*height*.12,boundary=reliable?nearTouchline(frame):undefined;
+ return {reliable,contains:(box:Box)=>{if(!reliable)return true;if(boundary&&(box.y+box.h)*frame.height>boundary.slope*(box.x+box.w/2)*frame.width+boundary.intercept+Math.max(8,box.h*frame.height*.12))return false;const x=(box.x+box.w/2)*width,y=Math.floor((box.y+box.h)*height);for(let row=Math.max(0,y-2);row<=Math.min(height-1,y+2);row++)if(x>=left[row]-2&&x<=right[row]+2)return true;return false;}};
 }
 function grey(f:Frame){const a=new Float32Array(f.width*f.height);for(let i=0;i<a.length;i++)a[i]=f.data[i*4]*.299+f.data[i*4+1]*.587+f.data[i*4+2]*.114;return a;}
 // Track textured background patches and robustly fit scale + translation.

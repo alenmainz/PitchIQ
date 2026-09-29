@@ -33,6 +33,11 @@ try {
   const css = html.match(/href="([^" ]+\.css)"/);
   assert.ok(css,'Page references a stylesheet');
   assert.equal((await call(css[1])).status,200);
+  for(const name of ['worker.js','engine.py',...JSON.parse(readFileSync('scripts/norfair-assets.json','utf8')).map(a=>'runtime/'+a.name),'runtime/norfair-2.3.0-py3-none-any.whl','runtime/filterpy-1.4.5-py3-none-any.whl']){
+    const response=await call('/norfair/'+name);assert.equal(response.status,200,name);
+    const actual=Buffer.from(await response.arrayBuffer()),expected=readFileSync('public/norfair/'+name);
+    assert.equal(createHash('sha256').update(actual).digest('hex'),createHash('sha256').update(expected).digest('hex'),name+' must serve the engine asset, not an HTML fallback');
+  }
   const anonymous = await fetch(new URL('/api/videos?action=init',origin),json({filename:'qa.mp4',size:bytes.length}));
   assert.equal(anonymous.status,401);
   const session = await decoded(await call('/api/videos?action=init',json({filename:'upload-qa.mp4',size:bytes.length,metadata:{opponent:'Upload QA',consent:true}})));
@@ -64,5 +69,5 @@ try {
   for(const match of trackingHtml.matchAll(/(?:src|href)="([^" ]+\.js)"/g))assert.equal((await call(match[1])).status,200);
   const repeated = await decoded(await call('/api/videos?action=complete',json({id})));
   assert.equal(repeated.id,id);
-  console.log(JSON.stringify({passed:true,bytes:bytes.length,chunks,sha256:hash(bytes),checks:['built Worker HTTP upload','completion','identical download','range seeking','out-of-range 416','anonymous 401','tracking API roster','tracking page','homepage CSS','idempotent completion']}));
+  console.log(JSON.stringify({passed:true,bytes:bytes.length,chunks,sha256:hash(bytes),checks:['built Worker HTTP upload','completion','identical download','range seeking','out-of-range 416','anonymous 401','tracking API roster','tracking page','homepage CSS','idempotent completion','all Norfair browser assets byte-identical']}));
 } finally {await mf.dispose();}
