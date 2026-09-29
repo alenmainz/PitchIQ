@@ -4,6 +4,7 @@ dist/
 .wrangler/
 .sites-runtime/
 .openai/
+.vinext/
 .env*
 !.env.example
 .venv/
